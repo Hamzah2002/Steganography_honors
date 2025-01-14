@@ -1,5 +1,30 @@
-from PIL import Image
+from PIL import Image, ImageOps
 import os
+
+def to_binary(value, bits=8):
+    """ Convert an integer to a binary string of a specified length with leading zeros. """
+    return bin(value)[2:].zfill(bits)
+
+
+def add_padding(image, target_width, target_height):
+    """
+    Adds padding to the image to fit the target dimensions.
+    Pads equally on all sides if possible.
+    """
+    width, height = image.size
+    padding_width = (target_width - width) // 2
+    padding_height = (target_height - height) // 2
+
+    padding = (
+        padding_width,          # Left
+        padding_height,         # Top
+        target_width - width - padding_width,  # Right
+        target_height - height - padding_height  # Bottom
+    )
+
+    padded_image = ImageOps.expand(image, padding)
+    return padded_image
+
 
 def hide_image():
     host_image_path = input("Enter the path to the host image (PNG/BMP): ").strip()
@@ -16,29 +41,39 @@ def hide_image():
         print(f"Host image size: {host_width}x{host_height}")
         print(f"Original secret image size: {secret_width}x{secret_height}")
 
-        # Resize secret image if it's larger than the host image
-        if secret_width > host_width or secret_height > host_height:
-            print("Resizing the secret image to fit inside the host image...")
-            secret_image = secret_image.resize((host_width, host_height))
+        # If the secret image is smaller, pad it to fit inside the host image
+        if secret_width < host_width or secret_height < host_height:
+            print("Padding the secret image to fit the host image dimensions...")
+            secret_image = add_padding(secret_image, host_width, host_height)
             secret_width, secret_height = secret_image.size
-            print(f"Resized secret image size: {secret_width}x{secret_height}")
+            print(f"Padded secret image size: {secret_width}x{secret_height}")
 
         host_pixels = host_image.load()
         secret_pixels = secret_image.load()
 
-        # Store dimensions in the first 4 pixels of the first row
-        metadata_pixels = [(0, 0), (0, 1), (1, 0), (1, 1)]
-        host_pixels[0, 0] = (secret_width & 0xFF, (secret_width >> 8) & 0xFF, 0)
-        host_pixels[0, 1] = (secret_height & 0xFF, (secret_height >> 8) & 0xFF, 0)
-        print(f"Embedding width: {secret_width}, height: {secret_height}")
-        print(f"Metadata pixels: (0, 0): {host_pixels[0, 0]}, (0, 1): {host_pixels[0, 1]}")
+        # Store the secret dimensions as 12 bits each (first pixel)
+        secret_width_binary = to_binary(secret_width, 12)
+        secret_height_binary = to_binary(secret_height, 12)
+        dimension_binary = secret_width_binary + secret_height_binary
 
-        # Embed secret image data, avoiding metadata region (first two rows)
-        for y in range(2, secret_height):  # Start from row 2 to avoid overwriting metadata
+        host_pixels[0, 0] = (
+            int(dimension_binary[:8], 2),
+            int(dimension_binary[8:16], 2),
+            int(dimension_binary[16:24], 2)
+        )
+
+        print(f"Embedding dimensions: {secret_width}x{secret_height}")
+
+        idx = 0
+        for y in range(secret_height):
             for x in range(secret_width):
+                if (x == 0 and y == 0):
+                    continue
+
                 r_host, g_host, b_host = host_pixels[x, y]
                 r_secret, g_secret, b_secret = secret_pixels[x, y]
 
+                # Embed 4 MSBs of the secret RGB into 4 LSBs of the host RGB
                 r_new = (r_host & 0xF0) | (r_secret >> 4)
                 g_new = (g_host & 0xF0) | (g_secret >> 4)
                 b_new = (b_host & 0xF0) | (b_secret >> 4)
@@ -46,7 +81,7 @@ def hide_image():
                 host_pixels[x, y] = (r_new, g_new, b_new)
 
         host_image.save(output_image_path)
-        print(f"Secret image hidden successfully in {output_image_path}")
+        print(f"Secret image successfully hidden in {output_image_path}")
 
     except Exception as e:
         print(f"Error during hiding: {e}")
@@ -57,36 +92,37 @@ def extract_image():
     output_secret_image_path = input("Enter the path to save the extracted secret image: ").strip()
 
     try:
-        if not os.path.exists(steg_image_path):
-            print(f"Error: File {steg_image_path} not found.")
-            return
-
         steg_image = Image.open(steg_image_path).convert("RGB")
         steg_pixels = steg_image.load()
 
-        # Read dimensions from metadata pixels
-        secret_width = steg_pixels[0, 0][0] | (steg_pixels[0, 0][1] << 8)
-        secret_height = steg_pixels[0, 1][0] | (steg_pixels[0, 1][1] << 8)
+        # Read the dimensions from the first pixel
+        r, g, b = steg_pixels[0, 0]
+        width_binary = to_binary(r, 8) + to_binary(g, 8)[:4]
+        height_binary = to_binary(g, 8)[4:] + to_binary(b, 8)
+        secret_width = int(width_binary, 2)
+        secret_height = int(height_binary, 2)
 
-        print(f"Stego image size: {steg_image.size[0]}x{steg_image.size[1]}")
-        print(f"Extracted secret size: {secret_width}x{secret_height}")
-        print(f"Metadata pixels: (0, 0): {steg_pixels[0, 0]}, (0, 1): {steg_pixels[0, 1]}")
-
-        # Validate dimensions
-        if secret_width > steg_image.size[0] or secret_height > steg_image.size[1]:
-            raise ValueError(f"Invalid secret image dimensions detected: {secret_width}x{secret_height}")
+        print(f"Extracted dimensions: {secret_width}x{secret_height}")
 
         secret_image = Image.new("RGB", (secret_width, secret_height))
         secret_pixels = secret_image.load()
 
-        # Extract secret image data, avoiding metadata region (first two rows)
-        for y in range(2, secret_height):
+        # Extract the secret image pixel data
+        for y in range(secret_height):
             for x in range(secret_width):
+                if (x == 0 and y == 0):
+                    continue
+
                 r, g, b = steg_pixels[x, y]
 
-                r_secret = (r & 0x0F) << 4
-                g_secret = (g & 0x0F) << 4
-                b_secret = (b & 0x0F) << 4
+                # Extract 4 bits from each channel and reconstruct the secret RGB values
+                r_binary = to_binary(r, 8)[4:] + '0000'
+                g_binary = to_binary(g, 8)[4:] + '0000'
+                b_binary = to_binary(b, 8)[4:] + '0000'
+
+                r_secret = int(r_binary, 2)
+                g_secret = int(g_binary, 2)
+                b_secret = int(b_binary, 2)
 
                 secret_pixels[x, y] = (r_secret, g_secret, b_secret)
 
