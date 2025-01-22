@@ -21,7 +21,7 @@ class Uncover:
         """
         r, g, b = self._int_to_bin(rgb)
 
-        # Extract the last 4 bits and pad with leading zeros to make an 8-bit value
+        # Extract the last 4 bits and pad with zeros to make it an 8-bit value
         extracted_r = r[4:] + '0000'
         extracted_g = g[4:] + '0000'
         extracted_b = b[4:] + '0000'

@@ -8,23 +8,29 @@ class Hider:
 
     def _int_to_bin(self, rgb):
         """Convert an integer tuple to a binary (string) tuple."""
+        if len(rgb) != 3:
+            raise ValueError(f"Invalid RGB tuple: {rgb}")
         r, g, b = rgb
         return f'{r:08b}', f'{g:08b}', f'{b:08b}'
 
     def _bin_to_int(self, rgb):
         """Convert a binary (string) tuple to an integer tuple."""
+        if len(rgb) != 3:
+            raise ValueError(f"Invalid binary RGB tuple: {rgb}")
         r, g, b = rgb
         return int(r, 2), int(g, 2), int(b, 2)
 
     def _merge_rgb(self, rgb1, rgb2):
         """
         Embed the secret RGB tuple into the host RGB tuple.
-        Takes 4 bits from the secret image and retains 4 bits from the host image.
+        Preserve the host image's color as much as possible.
         """
         r1, g1, b1 = self._int_to_bin(rgb1)
         r2, g2, b2 = self._int_to_bin(rgb2)
+
+        # Blend 4 bits from the host image with 4 bits from the secret image
         merged_rgb = (
-            r1[:4] + r2[:4],  # 4 bits from host + 4 bits from secret
+            r1[:4] + r2[:4],  # Host's first 4 bits + Secret's last 4 bits
             g1[:4] + g2[:4],
             b1[:4] + b2[:4]
         )
@@ -60,6 +66,10 @@ class Hider:
         """
         Embed the secret image into the host image at a random position.
         """
+        # Convert to RGB to ensure compatibility
+        host_image = host_image.convert("RGB")
+        secret_image = secret_image.convert("RGB")
+
         # Resize the secret image while maintaining aspect ratio
         secret_image_resized = self.resize_secret(secret_image, host_image.size)
 
@@ -118,8 +128,6 @@ class SteganographyText:
         new_image = Image.new(image.mode, image.size)
         new_image.putdata(new_pixels)
         return new_image
-
-
 
 
 def main():
