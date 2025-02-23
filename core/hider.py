@@ -1,156 +1,91 @@
+import sys
+import os
+import numpy as np
 from PIL import Image
-import random
 
 
-class Hider:
-    def __init__(self):
-        self.text_steganography = SteganographyText()
+class LSBHider:
+    def __init__(self, host_image_path, secret_image_path, output_path):
+        self.host_image_path = host_image_path
+        self.secret_image_path = secret_image_path
+        self.output_path = output_path
 
-    def _int_to_bin(self, rgb):
-        """Convert an integer tuple to a binary (string) tuple."""
-        if len(rgb) != 3:
-            raise ValueError(f"Invalid RGB tuple: {rgb}")
-        r, g, b = rgb
-        return f'{r:08b}', f'{g:08b}', f'{b:08b}'
+    def process_secret_image(self, host_size):
+        """ Resize and preprocess the secret image before embedding. """
+        secret_image = Image.open(self.secret_image_path).convert("RGB")
 
-    def _bin_to_int(self, rgb):
-        """Convert a binary (string) tuple to an integer tuple."""
-        if len(rgb) != 3:
-            raise ValueError(f"Invalid binary RGB tuple: {rgb}")
-        r, g, b = rgb
-        return int(r, 2), int(g, 2), int(b, 2)
+        # Flip the secret image vertically before processing
+        secret_image = secret_image.transpose(Image.FLIP_TOP_BOTTOM)
 
-    def _merge_rgb(self, rgb1, rgb2):
-        """
-        Embed the secret RGB tuple into the host RGB tuple.
-        Preserve the host image's color as much as possible.
-        """
-        r1, g1, b1 = self._int_to_bin(rgb1)
-        r2, g2, b2 = self._int_to_bin(rgb2)
+        # Step 1: If the secret is larger than the host, resize it to fit while maintaining aspect ratio
+        if secret_image.width > host_size[0] or secret_image.height > host_size[1]:
+            secret_image.thumbnail((host_size[0], host_size[1]), Image.Resampling.LANCZOS)
 
-        # Blend 4 bits from the host image with 4 bits from the secret image
-        merged_rgb = (
-            r1[:4] + r2[:4],  # Host's first 4 bits + Secret's last 4 bits
-            g1[:4] + g2[:4],
-            b1[:4] + b2[:4]
-        )
-        return self._bin_to_int(merged_rgb)
+        # Step 2: Mandatory 50% downsize
+        new_width = max(1, secret_image.width // 2)
+        new_height = max(1, secret_image.height // 2)
+        secret_image = secret_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-    def resize_secret(self, secret_image, host_image_size):
-        """
-        Resize the secret image to 50% of the host image size while preserving its aspect ratio.
-        Rotate the secret image by 180 degrees to obfuscate it.
-        """
-        secret_image = secret_image.convert("RGB").rotate(180)  # Rotate for obfuscation
-        host_width, host_height = host_image_size
+        return secret_image
 
-        # Calculate the new size while maintaining aspect ratio
-        secret_width, secret_height = secret_image.size
-        scale_factor = 0.5  # 50% of host size
-        max_width = int(host_width * scale_factor)
-        max_height = int(host_height * scale_factor)
+    def find_darkest_region(self, host_array, secret_size):
+        """ Find the darkest region in the host image for best concealment. """
+        grayscale = np.mean(host_array, axis=2)  # Convert RGB to grayscale
+        darkest_y, darkest_x = np.unravel_index(np.argmin(grayscale), grayscale.shape)  # Find darkest pixel
 
-        aspect_ratio = secret_width / secret_height
-        if aspect_ratio > 1:
-            # Landscape orientation
-            new_width = min(max_width, secret_width)
-            new_height = int(new_width / aspect_ratio)
-        else:
-            # Portrait or square orientation
-            new_height = min(max_height, secret_height)
-            new_width = int(new_height * aspect_ratio)
+        # Ensure the secret image fits inside the found position
+        darkest_x = min(darkest_x, host_array.shape[1] - secret_size[0])
+        darkest_y = min(darkest_y, host_array.shape[0] - secret_size[1])
 
-        return secret_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        return darkest_x, darkest_y
 
-    def merge(self, host_image, secret_image):
-        """
-        Embed the secret image into the host image at a random position.
-        """
-        # Convert to RGB to ensure compatibility
-        host_image = host_image.convert("RGB")
-        secret_image = secret_image.convert("RGB")
+    def embed_secret(self):
+        """ Embed the secret image into the host image using 4-bit LSB encoding. """
+        print(f"\n🔹 Hiding '{self.secret_image_path}' inside '{self.host_image_path}'")
 
-        # Resize the secret image while maintaining aspect ratio
-        secret_image_resized = self.resize_secret(secret_image, host_image.size)
+        # Load images
+        host_image = Image.open(self.host_image_path).convert("RGB")
+        secret_image = self.process_secret_image(host_image.size)
 
-        # Randomly select a position within the host image bounds
-        host_width, host_height = host_image.size
-        secret_width, secret_height = secret_image_resized.size
-        max_x = host_width - secret_width
-        max_y = host_height - secret_height
-        pos_x = random.randint(0, max_x)
-        pos_y = random.randint(0, max_y)
+        # Convert to NumPy arrays
+        host_array = np.array(host_image, dtype=np.uint8)
+        secret_array = np.array(secret_image, dtype=np.uint8)
 
-        # Encode metadata into the host image (position and size)
-        metadata = f"{pos_x},{pos_y},{secret_width},{secret_height}"
-        host_image = self.text_steganography.hide_text_in_metadata(host_image, metadata)
+        # Find the darkest region for embedding
+        x_offset, y_offset = self.find_darkest_region(host_array, secret_image.size)
 
-        # Debugging: Verify the metadata being encoded
-        print(f"Metadata to encode: {metadata}")
+        # Create a blank image the same size as the host and paste the secret into the darkest location
+        temp_secret = Image.new("RGB", host_image.size, (0, 0, 0))
+        temp_secret.paste(secret_image, (x_offset, y_offset))
 
-        # Load pixel maps for embedding
-        host_pixels = host_image.load()
-        secret_pixels = secret_image_resized.load()
+        # Convert back to NumPy
+        secret_array = np.array(temp_secret, dtype=np.uint8)
 
-        # Embed the secret image into the host image at the chosen position
-        for x in range(secret_width):
-            for y in range(secret_height):
-                host_x = pos_x + x
-                host_y = pos_y + y
-                host_rgb = host_pixels[host_x, host_y]
-                secret_rgb = secret_pixels[x, y]
-                host_pixels[host_x, host_y] = self._merge_rgb(host_rgb, secret_rgb)
+        # Extract the most significant 4 bits of the secret image
+        secret_array = (secret_array >> 4) & 0x0F  # Keep upper 4 bits
 
-        return host_image
+        # Clear the least significant 4 bits of the host image
+        host_array = host_array & 0xF0  # Clear lower 4 bits
 
+        # Embed the secret image
+        embedded_array = host_array | secret_array  # Merge upper 4 bits into host
 
-class SteganographyText:
-    def hide_text_in_metadata(self, image, text):
-        """
-        Encode metadata into the first few pixels of the image.
-        """
-        binary_text = ''.join(f'{ord(c):08b}' for c in text) + '1111111111111110'  # Add delimiter
-        pixels = list(image.getdata())
-        new_pixels = []
+        # Save optimized PNG
+        output_image = Image.fromarray(embedded_array)
+        output_path = self.ensure_png_extension()
+        output_image.save(output_path, format="PNG", optimize=True, compress_level=6)  # Reduced compression level
 
-        binary_index = 0
-        for pixel in pixels:
-            new_pixel = list(pixel)
-            for i in range(3):  # R, G, B channels
-                if binary_index < len(binary_text):
-                    new_pixel[i] = (new_pixel[i] & 0xFE) | int(binary_text[binary_index])
-                    binary_index += 1
-            new_pixels.append(tuple(new_pixel))
+        print(f"✅ Stego image saved successfully to: {output_path}")
 
-        # Debugging: Verify binary metadata being encoded
-        print(f"Encoded metadata (binary with delimiter): {binary_text}")
-
-        new_image = Image.new(image.mode, image.size)
-        new_image.putdata(new_pixels)
-        return new_image
-
-
-def main():
-    print("Steganography - Hide an Image")
-    host_image_path = input("Enter the path to the host image (PNG/BMP): ")
-    secret_image_path = input("Enter the path to the secret image (PNG/BMP): ")
-    output_image_path = input("Enter the path to save the output stego image: ")
-
-    try:
-        # Open the host and secret images
-        host_image = Image.open(host_image_path)
-        secret_image = Image.open(secret_image_path)
-
-        # Embed the secret image into the host image
-        hider = Hider()
-        stego_image = hider.merge(host_image, secret_image)
-
-        # Save the resulting stego image
-        stego_image.save(output_image_path)
-        print(f"Stego image saved successfully to: {output_image_path}")
-    except Exception as e:
-        print(f"Error: {e}")
+    def ensure_png_extension(self):
+        """ Ensure the output file has a .png extension. """
+        return os.path.splitext(self.output_path)[0] + ".png"
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 4:
+        print("Usage: python hider.py <host_image_path> <secret_image_path> <output_image_path>")
+        sys.exit(1)
+
+    hider = LSBHider(sys.argv[1], sys.argv[2], sys.argv[3])
+    hider.embed_secret()
