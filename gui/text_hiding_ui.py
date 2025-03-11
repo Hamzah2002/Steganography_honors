@@ -1,8 +1,10 @@
-from PyQt6.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QFileDialog, QLineEdit, QTextEdit
+from PyQt6.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QFileDialog, QTextEdit, QMessageBox
 from PyQt6.QtGui import QFont
 import sys
 import subprocess
 import styles  # Import centralized styling
+import traceback
+from PyQt6.QtWidgets import QMessageBox
 
 class TextHidingWindow(QWidget):
     def __init__(self):
@@ -10,7 +12,7 @@ class TextHidingWindow(QWidget):
 
         self.setWindowTitle("Hide Text in Image")
         self.setGeometry(300, 300, 500, 400)
-        self.setStyleSheet(f"background-color: {styles.BACKGROUND_COLOR};")  # Use global background color
+        self.setStyleSheet(f"background-color: {styles.BACKGROUND_COLOR};")
 
         # Load font
         self.font = QFont("Courier New", 12, QFont.Weight.Bold)
@@ -18,20 +20,20 @@ class TextHidingWindow(QWidget):
         # Labels
         self.label = QLabel("Select an image and enter text:", self)
         self.label.setFont(self.font)
-        self.label.setStyleSheet(styles.LABEL_STYLE)  # Use label styling
+        self.label.setStyleSheet(styles.LABEL_STYLE)
 
         # Input Fields
         self.text_input = QTextEdit(self)
         self.text_input.setPlaceholderText("Enter text to hide here...")
         self.text_input.setFont(self.font)
-        self.text_input.setStyleSheet(styles.TEXT_INPUT_STYLE)  # Use text input styling
+        self.text_input.setStyleSheet(styles.TEXT_INPUT_STYLE)
 
         # Buttons
         self.btn_select_image = QPushButton("📁 Select Image")
         self.btn_save_output = QPushButton("💾 Save Output Image")
         self.btn_hide_text = QPushButton("🔥 Hide Text")
 
-        # Apply centralized styling
+        # Apply styling
         for btn in [self.btn_select_image, self.btn_save_output, self.btn_hide_text]:
             btn.setFont(self.font)
             btn.setStyleSheet(styles.BUTTON_STYLE)
@@ -61,20 +63,53 @@ class TextHidingWindow(QWidget):
             self.image_path = path
 
     def select_output_path(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Save Stego Image", "", "Images (*.png)")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Stego Image", "", "Images (*.bmp)")  # Save as BMP for stability
         if path:
             self.output_image_path = path
 
+
+
     def hide_text(self):
-        if not self.image_path or not self.output_image_path or not self.text_input.toPlainText():
-            print("❌ Error: Select an image and enter text first.")
+        if not self.image_path:
+            QMessageBox.critical(self, "Error", "❌ Please select an image first.")
             return
 
-        text = self.text_input.toPlainText()
+        if not self.output_image_path:
+            QMessageBox.critical(self, "Error", "❌ Please select an output path.")
+            return
 
-        # Run Text_Hiding.py as subprocess
-        subprocess.run([sys.executable, "core/Text_Hiding.py", "hide", self.image_path, text, self.output_image_path])
-        print(f"✅ Text hidden successfully in {self.output_image_path}")
+        text = self.text_input.toPlainText().strip()
+        if not text:
+            QMessageBox.critical(self, "Error", "❌ Please enter text to hide.")
+            return
+
+        try:
+            # Attempt to run the subprocess and capture errors
+            result = subprocess.run(
+                [sys.executable, "core/Text_Hiding.py", "hide", self.image_path, text, self.output_image_path],
+                capture_output=True, text=True
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() or "Unknown error occurred."
+                QMessageBox.critical(self, "Error", f"❌ Failed to hide text:\n{error_msg}")
+                return
+
+            QMessageBox.information(self, "Success", f"✅ Text hidden successfully in:\n{self.output_image_path}")
+
+        except FileNotFoundError as e:
+            QMessageBox.critical(self, "Error", "❌ core/Text_Hiding.py not found.")
+            print("FileNotFoundError:", e)
+
+        except subprocess.CalledProcessError as e:
+            QMessageBox.critical(self, "Error", f"❌ Subprocess error:\n{e.stderr}")
+            print("CalledProcessError:", e)
+
+        except Exception as e:
+            # Capture full error trace
+            error_trace = traceback.format_exc()
+            QMessageBox.critical(self, "Critical Error", f"❌ Unexpected error:\n{str(e)}")
+            print("Unexpected Error:\n", error_trace)
 
 
 # -------------------------- TEXT EXTRACTION UI -------------------------- #
@@ -84,7 +119,7 @@ class TextExtractWindow(QWidget):
 
         self.setWindowTitle("Extract Hidden Text")
         self.setGeometry(300, 300, 500, 300)
-        self.setStyleSheet(f"background-color: {styles.BACKGROUND_COLOR};")  # Use global background color
+        self.setStyleSheet(f"background-color: {styles.BACKGROUND_COLOR};")
 
         # Load font
         self.font = QFont("Courier New", 12, QFont.Weight.Bold)
@@ -92,7 +127,7 @@ class TextExtractWindow(QWidget):
         # Labels
         self.label = QLabel("Select an image with hidden text:", self)
         self.label.setFont(self.font)
-        self.label.setStyleSheet(styles.LABEL_STYLE)  # Use label styling
+        self.label.setStyleSheet(styles.LABEL_STYLE)
 
         # Buttons
         self.btn_select_image = QPushButton("📁 Select Image")
@@ -102,9 +137,9 @@ class TextExtractWindow(QWidget):
         self.extracted_text = QTextEdit(self)
         self.extracted_text.setFont(self.font)
         self.extracted_text.setReadOnly(True)
-        self.extracted_text.setStyleSheet(styles.TEXT_INPUT_STYLE)  # Use text input styling
+        self.extracted_text.setStyleSheet(styles.TEXT_INPUT_STYLE)
 
-        # Apply centralized styling
+        # Apply styling
         for btn in [self.btn_select_image, self.btn_extract_text]:
             btn.setFont(self.font)
             btn.setStyleSheet(styles.BUTTON_STYLE)
@@ -132,16 +167,28 @@ class TextExtractWindow(QWidget):
 
     def extract_text(self):
         if not self.image_path:
-            print("❌ Error: Select an image first.")
+            QMessageBox.critical(self, "Error", "❌ Please select an image first.")
             return
 
-        # Run Text_Hiding.py as subprocess to extract text
-        result = subprocess.run([sys.executable, "core/Text_Hiding.py", "extract", self.image_path], capture_output=True, text=True)
-        extracted_text = result.stdout.strip()
+        try:
+            # Run subprocess with error handling
+            result = subprocess.run(
+                [sys.executable, "core/Text_Hiding.py", "extract", self.image_path],
+                capture_output=True, text=True, check=True
+            )
 
-        if extracted_text:
-            self.extracted_text.setText(extracted_text)
-            print(f"✅ Extracted text:\n{extracted_text}")
-        else:
-            self.extracted_text.setText("⚠ No hidden text found.")
-            print("⚠ No hidden text found.")
+            extracted_text = result.stdout.strip()
+
+            if extracted_text:
+                self.extracted_text.setText(extracted_text)
+                QMessageBox.information(self, "Success", f"✅ Extracted text:\n{extracted_text}")
+            else:
+                self.extracted_text.setText("⚠ No hidden text found.")
+                QMessageBox.warning(self, "Warning", "⚠ No hidden text found.")
+
+        except FileNotFoundError:
+            QMessageBox.critical(self, "Error", "❌ core/Text_Hiding.py not found.")
+        except subprocess.CalledProcessError as e:
+            QMessageBox.critical(self, "Error", f"❌ Error extracting text:\n{e.stderr}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"❌ Unexpected error:\n{str(e)}")
