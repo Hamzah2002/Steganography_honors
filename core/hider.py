@@ -81,6 +81,11 @@ class LSBHider:
         """ Ensure the output file has a .png extension. """
         return os.path.splitext(self.output_path)[0] + ".png"
 
+def embed_secret_wrapper(host_image_path, secret_image_path, output_image_path):
+    hider = LSBHider(host_image_path, secret_image_path, output_image_path)
+    hider.embed_secret()
+
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:

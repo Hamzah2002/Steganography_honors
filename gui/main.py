@@ -2,6 +2,7 @@ from gui.gui_window import RetroStegApp  # Import the main window class
 from PyQt6.QtWidgets import QApplication
 import sys
 
+
 def main():
     """Entry point for the Retro Steganography GUI application."""
     app = QApplication(sys.argv)  # Create the application instance

@@ -1,5 +1,4 @@
 import sys
-import subprocess
 import traceback
 import os
 
@@ -9,7 +8,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 
-import styles  # Import your centralized styling
+from styles import styles
+
+# Import helper functions from your core/text_hiding.py module
+from core.Text_Hiding import hide_text_wrapper, extract_text_wrapper
 
 
 class TextHidingWindow(QWidget):
@@ -88,12 +90,10 @@ class TextHidingWindow(QWidget):
             "Images (*.png *.bmp)"
         )
         if path:
-            # Ensure the user has an actual extension:
+            # Ensure the user has an actual extension; default to .png if not provided
             _, ext = os.path.splitext(path)
-            if not ext:  # If user typed something without .png or .bmp
-                path += ".png"  # Default to .png
-
-            # Now set the final output path
+            if not ext:
+                path += ".png"
             self.output_image_path = path
 
             self.label.setText("STEP 3: Enter your text above, then click 'Hide Text'")
@@ -101,97 +101,22 @@ class TextHidingWindow(QWidget):
 
     def hide_text(self):
         """Step 3: Embed the provided text into the selected image."""
-        # Basic validations with forced style for error messages:
         if not self.image_path:
-            msg_box = QMessageBox(self)
-            msg_box.setStyleSheet("""
-                QMessageBox { background-color: #000000 !important; }
-                QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-                QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
-                QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
-                QMessageBox QPushButton:pressed { background-color: #222222 !important; }
-            """)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle("Error")
-            msg_box.setText("❌ Please select an image first.")
-            msg_box.exec()
+            self.show_error("❌ Please select an image first.")
             return
 
         if not self.output_image_path:
-            msg_box = QMessageBox(self)
-            msg_box.setStyleSheet("""
-                QMessageBox { background-color: #000000 !important; }
-                QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-                QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
-                QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
-                QMessageBox QPushButton:pressed { background-color: #222222 !important; }
-            """)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle("Error")
-            msg_box.setText("❌ Please select an output path.")
-            msg_box.exec()
+            self.show_error("❌ Please select an output path.")
             return
 
         text = self.text_input.toPlainText().strip()
         if not text:
-            msg_box = QMessageBox(self)
-            msg_box.setStyleSheet("""
-                QMessageBox { background-color: #000000 !important; }
-                QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-                QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
-                QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
-                QMessageBox QPushButton:pressed { background-color: #222222 !important; }
-            """)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle("Error")
-            msg_box.setText("❌ Please enter text to hide.")
-            msg_box.exec()
+            self.show_error("❌ Please enter text to hide.")
             return
 
         try:
-            # Construct the script path. Ensure your file in the core folder is named exactly "text_hiding.py"
-            script_path = os.path.join(os.path.dirname(__file__), "..", "core", "text_hiding.py")
-
-            # Print debugging info:
-            print("Running hide subprocess:")
-            print("  Script Path: ", script_path)
-            print("  Image Path:  ", self.image_path)
-            print("  Output Path: ", self.output_image_path)
-
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    script_path,
-                    "hide",
-                    self.image_path,
-                    text,
-                    self.output_image_path
-                ],
-                capture_output=True,
-                text=True
-            )
-
-            # Print subprocess outputs for debugging:
-            print("Subprocess STDOUT:", result.stdout)
-            print("Subprocess STDERR:", result.stderr)
-
-            if result.returncode != 0:
-                error_msg = result.stderr.strip() or "Unknown error occurred."
-                msg_box = QMessageBox(self)
-                msg_box.setStyleSheet("""
-                    QMessageBox { background-color: #000000 !important; }
-                    QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-                    QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
-                    QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
-                    QMessageBox QPushButton:pressed { background-color: #222222 !important; }
-                """)
-                msg_box.setIcon(QMessageBox.Icon.Critical)
-                msg_box.setWindowTitle("Error")
-                msg_box.setText(f"❌ Failed to hide text:\n{error_msg}")
-                msg_box.exec()
-                return
-
-            # If successful, inform the user:
+            # Directly embed the text using the helper function
+            hide_text_wrapper(self.image_path, text, self.output_image_path)
             msg_box = QMessageBox(self)
             msg_box.setStyleSheet("""
                 QMessageBox { background-color: #000000 !important; }
@@ -204,56 +129,29 @@ class TextHidingWindow(QWidget):
             msg_box.setWindowTitle("Success")
             msg_box.setText(f"✅ Text hidden successfully in:\n{self.output_image_path}")
             msg_box.exec()
-
-        except FileNotFoundError as e:
-            msg_box = QMessageBox(self)
-            msg_box.setStyleSheet("""
-                QMessageBox { background-color: #000000 !important; }
-                QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-                QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
-                QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
-                QMessageBox QPushButton:pressed { background-color: #222222 !important; }
-            """)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle("Error")
-            msg_box.setText("❌ Could not find 'text_hiding.py' in the 'core' folder.")
-            msg_box.exec()
-            print("FileNotFoundError:", e)
-
-        except subprocess.CalledProcessError as e:
-            msg_box = QMessageBox(self)
-            msg_box.setStyleSheet("""
-                QMessageBox { background-color: #000000 !important; }
-                QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-                QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
-                QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
-                QMessageBox QPushButton:pressed { background-color: #222222 !important; }
-            """)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle("Error")
-            msg_box.setText(f"❌ Subprocess error:\n{e.stderr}")
-            msg_box.exec()
-            print("CalledProcessError:", e)
-
         except Exception as e:
             error_trace = traceback.format_exc()
-            msg_box = QMessageBox(self)
-            msg_box.setStyleSheet("""
-                QMessageBox { background-color: #000000 !important; }
-                QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-                QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
-                QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
-                QMessageBox QPushButton:pressed { background-color: #222222 !important; }
-            """)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle("Critical Error")
-            msg_box.setText(f"❌ Unexpected error:\n{str(e)}")
-            msg_box.exec()
+            self.show_error(f"❌ Failed to hide text:\n{str(e)}")
             print("Unexpected Error:\n", error_trace)
 
-##############################################
-# Text Extraction Window for Extracting Text #
-##############################################
+    def show_error(self, message):
+        msg_box = QMessageBox(self)
+        msg_box.setStyleSheet("""
+            QMessageBox { background-color: #000000 !important; }
+            QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
+            QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
+            QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
+            QMessageBox QPushButton:pressed { background-color: #222222 !important; }
+        """)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle("Error")
+        msg_box.setText(message)
+        msg_box.exec()
+
+
+#################################################################
+# Text Extraction Window for Extracting Hidden Text from Image  #
+#################################################################
 
 class TextExtractWindow(QWidget):
     def __init__(self):
@@ -305,46 +203,23 @@ class TextExtractWindow(QWidget):
             self.label.setText("Click 'Extract Text' to retrieve hidden text.")
 
     def extract_text(self):
-        """Run the extraction subprocess to retrieve hidden text."""
+        """Extract hidden text using the helper function."""
         if not self.image_path:
             self.show_error("❌ Please select an image first.")
             return
 
         try:
-            script_path = os.path.join(os.path.dirname(__file__), "..", "core", "text_hiding.py")
-            print("Extract text subprocess call:")
-            print("  Script Path:", script_path)
-            print("  Image Path:", self.image_path)
+            extracted_text = extract_text_wrapper(self.image_path)
 
-            result = subprocess.run(
-                [sys.executable, script_path, "extract", self.image_path],
-                capture_output=True, text=True
-            )
-
-            print("Subprocess STDOUT:", result.stdout)
-            print("Subprocess STDERR:", result.stderr)
-            print("Returncode:", result.returncode)
-
-            if result.returncode != 0:
-                error_msg = result.stderr.strip() or "Unknown error occurred during extraction."
-                self.show_error(f"❌ Error extracting text:\n{error_msg}")
-                return
-
-            extracted_text = result.stdout.strip()
             if extracted_text:
                 self.extracted_text.setText(extracted_text)
                 self.show_info(f"✅ Extracted text:\n{extracted_text}")
             else:
                 self.extracted_text.setText("⚠ No hidden text found.")
                 self.show_warning("⚠ No hidden text found.")
-
-        except FileNotFoundError as e:
-            self.show_error("❌ Could not find 'text_hiding.py' in the 'core' folder.")
-            print("FileNotFoundError:", e)
         except Exception as e:
-            error_trace = traceback.format_exc()
-            self.show_error(f"❌ Unexpected error:\n{str(e)}")
-            print("Unexpected Error:\n", error_trace)
+            self.show_error(f"❌ Extraction failed:\n{str(e)}")
+            print("Extraction error:", e)
 
     def show_error(self, message):
         msg_box = QMessageBox(self)

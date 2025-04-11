@@ -1,9 +1,11 @@
 from PyQt6.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QFileDialog
 from PyQt6.QtGui import QFont
-import sys
 import os
-import subprocess
-import styles  # Import centralized styling
+from styles import styles
+
+# Import the helper function from uncover.py
+from core.uncover import extract_secret_wrapper
+
 
 class ImageExtractWindow(QWidget):
     def __init__(self):
@@ -22,9 +24,9 @@ class ImageExtractWindow(QWidget):
         self.label.setStyleSheet(styles.LABEL_STYLE)
 
         # Buttons (Initially, only the first button is visible)
-        self.btn_select_stego = QPushButton("📁 Select Stego Image")
-        self.btn_save_output = QPushButton("💾 Save Extracted Image")
-        self.btn_extract = QPushButton("🔍 Extract Image")
+        self.btn_select_stego = QPushButton("Select Stego Image")
+        self.btn_save_output = QPushButton("Save Extracted Image")
+        self.btn_extract = QPushButton("Extract Image")
 
         # Apply centralized styling
         for btn in [self.btn_select_stego, self.btn_save_output, self.btn_extract]:
@@ -73,13 +75,8 @@ class ImageExtractWindow(QWidget):
             return
 
         try:
-            # ✅ Fix: Correct absolute path to `uncover.py`
-            script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script's directory
-            uncover_path = os.path.abspath(os.path.join(script_dir, "..", "core", "uncover.py"))  # Locate `uncover.py`
-
-            # Run uncover.py as subprocess
-            subprocess.run([sys.executable, uncover_path, self.stego_image_path, self.output_image_path], check=True)
-
+            # Directly extract the secret using the helper function
+            extract_secret_wrapper(self.stego_image_path, self.output_image_path)
             self.label.setText(f"✅ Image extracted successfully! Saved to:\n{self.output_image_path}")
             self.btn_extract.hide()  # Hide the button after completion
 

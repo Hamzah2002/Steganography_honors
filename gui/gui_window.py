@@ -1,10 +1,10 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QPushButton, QLabel, QVBoxLayout, QWidget, QHBoxLayout
 )
-from PyQt6.QtGui import QFont, QMovie
-from PyQt6.QtCore import Qt, QTimer, QUrl, QRect
+from PyQt6.QtGui import QMovie
+from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-import styles
+from styles import styles
 import os
 import traceback
 
@@ -14,7 +14,7 @@ class RetroStegApp(QMainWindow):
         super().__init__()
 
         # 💀 Setup Main Window
-        self.setWindowTitle("💀 Retro Skeleton Steganography 💀")
+        self.setWindowTitle("💀 ByteSmuggler 💀")
         self.setGeometry(100, 100, 800, 600)
         self.setStyleSheet(f"background-color: {styles.BACKGROUND_COLOR};")
 
@@ -48,7 +48,7 @@ class RetroStegApp(QMainWindow):
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setFont(self.font)
         self.label.setStyleSheet(styles.LABEL_STYLE)
-        self.typing_text = "💀 RETRO STEGANOGRAPHY TOOL 💀"
+        self.typing_text = "💀 ByteSmuggler 💀"
         self.text_index = 0
         self.typing_timer = QTimer(self)
         self.typing_timer.timeout.connect(self.typing_effect)
@@ -154,7 +154,7 @@ class RetroStegApp(QMainWindow):
         song_url = QUrl.fromLocalFile(song_path)  # Convert string to QUrl
         self.media_player.setSource(song_url)
         self.media_player.play()
-        print(f"🎵 Now playing: {song_path}")
+        print(f"Now playing: {song_path}")
 
         # 🎵 Start a volume fade-in effect over 5 seconds
         self.fade_in_volume()
@@ -248,8 +248,6 @@ class RetroStegApp(QMainWindow):
         from gui.image_extract_ui import ImageExtractWindow
         self.image_extract_window = ImageExtractWindow()
         self.image_extract_window.show()
-
-    import traceback
 
     def open_text_hiding(self):
         try:

@@ -1,15 +1,19 @@
-import sys
 import os
-import subprocess
+import sys
 import traceback
+import logging
 
 from PyQt6.QtWidgets import (
     QWidget, QPushButton, QLabel, QVBoxLayout, QFileDialog, QLineEdit, QMessageBox
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
-import styles  # Import your centralized styling file
 
+from styles import styles
+
+# Import helper functions from the core modules
+from core.encrypt import encrypt_image_wrapper
+from core.decrypt import decrypt_image_wrapper
 
 #######################################
 # Encryption Window (Step-by-Step)    #
@@ -42,9 +46,9 @@ class EncryptWindow(QWidget):
         self.password_input.editingFinished.connect(self.on_password_entered)
 
         # Buttons (some hidden initially)
-        self.btn_select_image = QPushButton("📁 Select Image")
-        self.btn_save_output = QPushButton("💾 Save Encrypted Image")
-        self.btn_encrypt = QPushButton("🔐 Encrypt Image")
+        self.btn_select_image = QPushButton("Select Image")
+        self.btn_save_output = QPushButton("Save Encrypted Image")
+        self.btn_encrypt = QPushButton("Encrypt Image")
 
         for btn in [self.btn_select_image, self.btn_save_output, self.btn_encrypt]:
             btn.setFont(self.font)
@@ -85,14 +89,11 @@ class EncryptWindow(QWidget):
 
     def on_password_entered(self):
         """
-        Automatically triggered when the user finishes typing
-        (editingFinished signal). If valid password, show next step.
+        Automatically triggered when the user finishes typing the password.
+        If valid (8+ chars), show the next step.
         """
         password = self.password_input.text().strip()
-        # We won't show an error message here because maybe user is still typing.
-        # But let's ensure it's at least 8 chars before letting them proceed:
         if len(password) < 8:
-            # Clear or re-focus if password is invalid
             self.show_error("❌ Password must be 8+ characters.")
             self.password_input.setFocus()
             return
@@ -107,15 +108,15 @@ class EncryptWindow(QWidget):
             self,
             "Save Encrypted Image",
             "",
-            "Images (*.png)"  # Adjust if you want multiple formats
+            "Images (*.png)"
         )
         if path:
-            self.output_image_path = path
+            self.output_image_path = path if path.lower().endswith(".png") else f"{path}.png"
             self.label.setText("STEP 4: Click 'Encrypt Image' to finalize")
             self.btn_encrypt.show()
 
     def encrypt_image(self):
-        """STEP 4: Run the encryption subprocess."""
+        """STEP 4: Encrypt the image using the helper function."""
         password = self.password_input.text().strip()
         if not self.image_path:
             self.show_error("❌ Error: No image selected.")
@@ -128,56 +129,21 @@ class EncryptWindow(QWidget):
             return
 
         try:
-            # Build path to encrypt.py
-            script_path = os.path.join(
-                os.path.dirname(__file__), "..", "core", "encrypt.py"
-            )
-
-            print("Encrypt Subprocess Call:")
-            print("  Script Path:", script_path)
-            print("  Image Path:", self.image_path)
-            print("  Password: (hidden)")
-            print("  Output Path:", self.output_image_path)
-
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    script_path,
-                    self.image_path,
-                    password,
-                    self.output_image_path
-                ],
-                capture_output=True,
-                text=True
-            )
-
-            print("Subprocess STDOUT:", result.stdout)
-            print("Subprocess STDERR:", result.stderr)
-
-            if result.returncode != 0:
-                error_msg = result.stderr.strip() or "Unknown error during encryption."
-                self.show_error(f"❌ Encryption failed:\n{error_msg}")
-                return
-
-            self.show_info(f"✅ Image encrypted successfully in {self.output_image_path}")
-
-        except FileNotFoundError as e:
-            self.show_error("❌ Could not find 'encrypt.py' in the 'core' folder.")
-            print("FileNotFoundError:", e)
+            # Call the helper function directly.
+            message = encrypt_image_wrapper(self.image_path, password, self.output_image_path)
+            self.show_info(message)
         except Exception as e:
-            trace = traceback.format_exc()
-            self.show_error(f"❌ Unexpected error:\n{str(e)}")
-            print("Unexpected Error:\n", trace)
+            self.show_error(f"❌ Encryption failed:\n{str(e)}")
+            print("Encryption Error:", traceback.format_exc())
 
-    # --------------------------
-    # Helper Methods: show_error, show_info
-    # --------------------------
     def show_error(self, message):
         msg_box = QMessageBox(self)
         msg_box.setStyleSheet("""
             QMessageBox { background-color: #000000 !important; }
-            QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-            QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
+            QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important;
+                font-size: 14px !important; }
+            QMessageBox QPushButton { background-color: #101010 !important; 
+                border: 2px solid #00FFFF !important; color: #00FF00 !important; }
             QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
             QMessageBox QPushButton:pressed { background-color: #222222 !important; }
         """)
@@ -190,8 +156,10 @@ class EncryptWindow(QWidget):
         msg_box = QMessageBox(self)
         msg_box.setStyleSheet("""
             QMessageBox { background-color: #000000 !important; }
-            QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
-            QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
+            QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important;
+                font-size: 14px !important; }
+            QMessageBox QPushButton { background-color: #101010 !important; 
+                border: 2px solid #00FFFF !important; color: #00FF00 !important; }
             QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
             QMessageBox QPushButton:pressed { background-color: #222222 !important; }
         """)
@@ -205,21 +173,7 @@ class EncryptWindow(QWidget):
 # Decryption Window (Step-by-Step)    #
 #######################################
 
-import sys
-import os
-import subprocess
-import traceback
-import logging
-from PyQt6.QtWidgets import (
-    QWidget, QPushButton, QLabel, QVBoxLayout, QFileDialog, QLineEdit, QMessageBox
-)
-from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt
-import styles  # your centralized styling
-
-# Set up basic logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
+# Note: The decryption portion still uses logging for debug purposes.
 class DecryptWindow(QWidget):
     def __init__(self):
         try:
@@ -253,20 +207,20 @@ class DecryptWindow(QWidget):
             logging.debug("DecryptWindow: Password input and 'Next' button created")
 
             # Button: Select Encrypted Image (always shown)
-            self.btn_select_image = QPushButton("📁 Select Encrypted Image", self)
+            self.btn_select_image = QPushButton("Select Encrypted Image", self)
             self.btn_select_image.setFont(self.font)
             self.btn_select_image.setStyleSheet(styles.BUTTON_STYLE)
             self.btn_select_image.clicked.connect(self.select_image)
 
             # Button: Save output (hidden until password is accepted)
-            self.btn_save_output = QPushButton("💾 Save Decrypted Image", self)
+            self.btn_save_output = QPushButton("Save Decrypted Image", self)
             self.btn_save_output.setFont(self.font)
             self.btn_save_output.setStyleSheet(styles.BUTTON_STYLE)
             self.btn_save_output.hide()
             self.btn_save_output.clicked.connect(self.select_output_path)
 
             # Button: Decrypt Image (hidden until output path chosen)
-            self.btn_decrypt = QPushButton("🔓 Decrypt Image", self)
+            self.btn_decrypt = QPushButton("Decrypt Image", self)
             self.btn_decrypt.setFont(self.font)
             self.btn_decrypt.setStyleSheet(styles.BUTTON_STYLE)
             self.btn_decrypt.hide()
@@ -319,7 +273,7 @@ class DecryptWindow(QWidget):
         logging.debug("select_output_path: Opening file dialog for output")
         path, _ = QFileDialog.getSaveFileName(self, "Save Decrypted Image", "", "Images (*.png)")
         if path:
-            self.output_image_path = path
+            self.output_image_path = path if path.lower().endswith(".png") else f"{path}.png"
             self.label.setText("STEP 4: Click 'Decrypt Image' to finalize")
             self.btn_decrypt.show()
             logging.debug(f"select_output_path: Output path selected: {path}")
@@ -338,50 +292,22 @@ class DecryptWindow(QWidget):
                 self.show_error("❌ Error: No output path selected.")
                 return
 
-            # Build the script path for decrypt.py in the core folder.
-            script_path = os.path.join(os.path.dirname(__file__), "..", "core", "decrypt.py")
-            logging.debug(f"decrypt_image: Script path: {script_path}")
-            logging.debug(f"decrypt_image: Encrypted image: {self.image_path}")
-            logging.debug(f"decrypt_image: Output image: {self.output_image_path}")
-
-            result = subprocess.run(
-                [sys.executable, script_path, self.image_path, password, self.output_image_path],
-                capture_output=True, text=True
-            )
-            logging.debug(f"decrypt_image: Subprocess return code: {result.returncode}")
-            logging.debug("decrypt_image: STDOUT: " + result.stdout)
-            logging.debug("decrypt_image: STDERR: " + result.stderr)
-
-            if result.returncode != 0:
-                error_msg = result.stderr.strip() or "Unknown error during decryption."
-                self.show_error(f"❌ Decryption failed:\n{error_msg}")
-                return
-
-            self.show_info(f"✅ Image decrypted successfully in {self.output_image_path}")
+            # Call the helper function directly.
+            message = decrypt_image_wrapper(self.image_path, password, self.output_image_path)
+            self.show_info(message)
+            logging.debug("decrypt_image: Decryption successful")
         except Exception as e:
-            self.show_error(f"❌ Unexpected error: {str(e)}")
+            self.show_error(f"❌ Decryption failed:\n{str(e)}")
             logging.error("decrypt_image: Exception occurred\n" + traceback.format_exc())
 
     def show_error(self, message):
         msg_box = QMessageBox(self)
         msg_box.setStyleSheet("""
             QMessageBox { background-color: #000000 !important; }
-            QMessageBox QLabel {
-                background-color: #000000 !important;
-                color: #00FF00 !important;  /* Neon Green Text */
-                font-size: 14px !important;
-            }
-            QMessageBox QPushButton {
-                background-color: #101010 !important;
-                border: 2px solid #00FFFF !important;  /* Cyan Border */
-                color: #00FF00 !important;
-            }
-            QMessageBox QPushButton:hover {
-                border-color: #FF00FF !important;  /* Magenta on hover */
-            }
-            QMessageBox QPushButton:pressed {
-                background-color: #222222 !important;
-            }
+            QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
+            QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
+            QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
+            QMessageBox QPushButton:pressed { background-color: #222222 !important; }
         """)
         msg_box.setIcon(QMessageBox.Icon.Critical)
         msg_box.setWindowTitle("Error")
@@ -392,26 +318,12 @@ class DecryptWindow(QWidget):
         msg_box = QMessageBox(self)
         msg_box.setStyleSheet("""
             QMessageBox { background-color: #000000 !important; }
-            QMessageBox QLabel {
-                background-color: #000000 !important;
-                color: #00FF00 !important;  /* Neon Green Text */
-                font-size: 14px !important;
-            }
-            QMessageBox QPushButton {
-                background-color: #101010 !important;
-                border: 2px solid #00FFFF !important;  /* Cyan Border */
-                color: #00FF00 !important;
-            }
-            QMessageBox QPushButton:hover {
-                border-color: #FF00FF !important;  /* Magenta on hover */
-            }
-            QMessageBox QPushButton:pressed {
-                background-color: #222222 !important;
-            }
+            QMessageBox QLabel { background-color: #000000 !important; color: #00FF00 !important; font-size: 14px !important; }
+            QMessageBox QPushButton { background-color: #101010 !important; border: 2px solid #00FFFF !important; color: #00FF00 !important; }
+            QMessageBox QPushButton:hover { border-color: #FF00FF !important; }
+            QMessageBox QPushButton:pressed { background-color: #222222 !important; }
         """)
         msg_box.setIcon(QMessageBox.Icon.Information)
         msg_box.setWindowTitle("Success")
         msg_box.setText(message)
         msg_box.exec()
-
-

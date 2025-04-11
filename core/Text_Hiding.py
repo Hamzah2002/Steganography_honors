@@ -98,6 +98,25 @@ class TextHiding:
 
         return extracted_text
 
+# -----------------------
+# Helper Functions
+# -----------------------
+
+def hide_text_wrapper(image_path, text, output_path):
+    """
+    Helper function to hide text in an image.
+    Call this function from your UI code.
+    """
+    th = TextHiding()
+    return th.hide_text(image_path, text, output_path)
+
+def extract_text_wrapper(image_path):
+    """
+    Helper function to extract hidden text from an image.
+    Call this function from your UI code.
+    """
+    th = TextHiding()
+    return th.extract_text(image_path)
 
 def main():
     """
@@ -143,7 +162,6 @@ def main():
 
     else:
         print(f"Unknown action '{action}'. Use 'hide' or 'extract'.")
-
 
 if __name__ == "__main__":
     main()

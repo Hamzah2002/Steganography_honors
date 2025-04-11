@@ -63,6 +63,11 @@ class LSBUnhider:
         """ Ensure the output file has a .png extension. """
         return os.path.splitext(self.output_path)[0] + ".png"
 
+def extract_secret_wrapper(stego_image_path, output_path):
+    unhider = LSBUnhider(stego_image_path, output_path)
+    unhider.extract_secret()
+
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

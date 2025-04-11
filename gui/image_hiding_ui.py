@@ -1,17 +1,20 @@
 from PyQt6.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QFileDialog
-from PyQt6.QtGui import QFont, QMovie
+from PyQt6.QtGui import QMovie
 from PyQt6.QtCore import Qt
-import styles  # Import centralized styling
+from styles import styles
 import os
 import sys
-import subprocess
+import traceback
+
+# Import the helper function from hider.py
+from core.hider import embed_secret_wrapper
 
 
 class ImageHidingWindow(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("💀 Hide an Image")
+        self.setWindowTitle("Hide an Image")
         self.setGeometry(300, 300, 500, 400)
         self.setStyleSheet(f"background-color: {styles.BACKGROUND_COLOR};")
 
@@ -28,10 +31,10 @@ class ImageHidingWindow(QWidget):
         self.glitch_gif_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "glitch.gif"))
 
         # 🎛️ Buttons
-        self.btn_select_host = QPushButton("📁 Select Host Image", self)
-        self.btn_select_secret = QPushButton("📁 Select Secret Image", self)
-        self.btn_save_output = QPushButton("💾 Save Output Image", self)
-        self.btn_hide = QPushButton("🔥 Hide Image", self)
+        self.btn_select_host = QPushButton("Select Host Image", self)
+        self.btn_select_secret = QPushButton("Select Secret Image", self)
+        self.btn_save_output = QPushButton("Save Output Image", self)
+        self.btn_hide = QPushButton("Hide Image", self)
 
         # Apply styles and glow effect
         for btn in [self.btn_select_host, self.btn_select_secret, self.btn_save_output, self.btn_hide]:
@@ -114,34 +117,11 @@ class ImageHidingWindow(QWidget):
             return
 
         try:
-            hider_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "core", "hider.py"))
-
-            if not os.path.exists(hider_script):
-                self.label.setText(f"❌ Error: hider.py not found!\nExpected at:\n{hider_script}")
-                return
-
-            # ✅ Capture stdout and stderr to get full error details
-            result = subprocess.run(
-                [sys.executable, hider_script, self.host_image_path, self.secret_image_path, self.output_image_path],
-                capture_output=True, text=True, check=True
-            )
-
-            # ✅ Check if there were any error messages in stderr
-            if result.stderr:
-                print("🚨 STDERR Output:", result.stderr)
-                self.label.setText(f"❌ Error:\n{result.stderr}")
-
-            else:
-                self.label.setText(f"✅ Image hidden successfully!\nSaved to:\n{self.output_image_path}")
-                self.btn_hide.hide()
-
-        except subprocess.CalledProcessError as e:
-            error_message = f"❌ Subprocess Error:\n{e.stderr}\n\nCheck the terminal for full details."
-            print("🚨 Subprocess Error:", e.stderr)
-            self.label.setText(error_message)
-
+            # Directly embed the secret image using the helper function
+            embed_secret_wrapper(self.host_image_path, self.secret_image_path, self.output_image_path)
+            self.label.setText(f"✅ Image hidden successfully!\nSaved to:\n{self.output_image_path}")
+            self.btn_hide.hide()
         except Exception as e:
-            import traceback
             error_trace = traceback.format_exc()
             print("🚨 Exception in hide_image():\n", error_trace)
             self.label.setText(f"❌ Unexpected Error:\n{str(e)}\n\nCheck the terminal.")
